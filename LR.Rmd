@@ -1,0 +1,572 @@
+---
+title: "Linear Models for Regression part 1"
+author: "Oluwafemi Chris"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    includes:
+      in_header: /home/oluwafemi/Documents/LinearRegression/header_template_jekyll.html
+      before_body: /home/oluwafemi/Documents/LinearRegression/before_body_jekyll_template.html
+      after_body: /home/oluwafemi/Documents/LinearRegression/afterbody_template_jekyll.html
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: false
+    theme: paper
+    toc_depth: 3
+    highlight: tango
+    df_print: paged
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# output: 
+#   md_document:
+#     variant: markdown_github
+```
+
+# Theory
+## Regression Tasks.
+
+Regression refers to tasks where you have to predict the value of a quantitative variable. For example, given the features of a laptop such as size of RAM, screen resolution, manufacturer, CPU, and GPU, predict the price.
+
+There are several techniques for regression, but we will start with linear models. In this blog post, you will see how to implement linear models for regression in Python and R. We will also discuss how this is done using libraries in both languages.
+
+
+## Linear Regression.
+
+Linear Regression is a simple approach that assumes there is a linear relationship between the features and the response variable. When you have one feature/predictor it is called a  *simple linear regression* $y = \beta_0 + \beta_1x$, and when there are more than one feature it is called a *multiple linear regression* $y = \beta_0 + \beta_1x_1 + \beta_2x_2 +...+\beta_nx_n$.
+
+For a linear regression task, the goal is to estimate $\beta$, and we use the estimate of $\beta$ to predict the response values for new observations.
+
+Note: the estimate of $\beta$ is sometimes written as $\hat{\beta}$ and pronounced "beta hat".
+
+## Estimating $\beta$ 
+
+There are different approaches for estimating the coefficients using least squares. The first is a closed-form or analytical approach, and the other is using iterative optimization methods. With both approaches, we seek $\beta$ that minimizes the *Residual Sum of Squares*: 
+$$RSS(\beta) = \sum_{j=1}^{m} (\hat{y}_j - x_j^T\beta)^2 $$ 
+
+## Closed-form estimation
+
+<!-- We set the gradient of RSS = 0 : $\nabla RSS(\beta) = -2X^T(y- X\beta)$  -->
+The idea is to set the gradient of $RSS$ to 0 giving us a closed-form solution of $\hat{\beta}$: $$\hat{\beta} = (X^TX)^{-1}X^Ty$$
+
+## Using iterative methods
+
+Iterative methods are mathematical procedures that use an initial guess to generate a sequence of improving approximate solutions for a class of problems, in which the n-th approximation is derived from the previous ones.^[Iterative method https://en.wikipedia.org/wiki/Iterative_method] 
+
+This is an optimization problem of the form: 
+$$\min \quad RSS(\beta) = \|y - X\beta\|^2 = \sum_{j=1}^{m} (\hat{y}_j - x_j^T\beta)^2$$
+We will look at only descent methods. Methods where $RSS(\beta^{(k+1)})<RSS(\beta^{(k)})$ until we reach convergence, i.e the $RSS$ at the current iteration is smaller than $RSS$ at the previous iteration until some stopping criteria is satisfied. There will be another post exploring in depth these optimization methods.
+
+
+## Gradient Descent
+
+The gradient descent procedure for minimizing RSS is presented below.
+
+*****
+
+**Algorithm**  
+  initial guess of $\beta$  
+  **repeat**  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1. $\Delta\beta := -\nabla RSS(\beta)$  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2. update  $\beta := \beta + t\Delta\beta$  
+  **until** convergence
+
+*****
+$t$ - fixed stepsize, $\nabla RSS(\beta) = -2X^T(y-X\beta)$ - derivative of RSS, $\Delta\beta$ - step direction  
+
+"Repeat until convergence" means until some stopping rule is satisfied. The following are some of the commonly used stopping rules:  
+
+* *maxit* - setting a maximum number of iterations
+* $|\beta^{(k+1)} - \beta^{(k)}| < \epsilon$ where $\epsilon$ is very small(e.g $10^{-10}$)
+
+
+## Closed-form vs GD
+
+In a lot of machine learning problems there are no closed-form solutions, therefore we have to use  optimization methods like Gradient Descent. In practice, when the data is high-dimensional it is much more efficient computationally to use iterative methods. One drawback of descent methods is that it can be very challenging to find the right step-size. It may take a long time to converge with a small step-size, while descent methods may fail to converge with a large step-size. 
+
+## Model Assessment
+
+We need a way to assess how well the model fits the data. Two of the most often used statistics are $R^2$ and $RSE$ - *Residual Standard Error*
+
+$$RSE = \sqrt{\frac{1}{n-p-1}RSS}$$  
+If the model predictions are close to the true response values we will obtain a small RSE, which means our model fits the data.  
+
+How small is small enough for RSE? The answer depends on the data.  
+The $R^2$ is always between 0 and 1. A value close to 0 means the model doesn't quite fit the data while a value close to 1 suggests the linear model fits the data.
+
+$$R^2 = \frac{TSS-RSS}{TSS} = 1- \frac{RSS}{TSS}$$
+$TSS = \sum_{j=1}^{m} (y-\bar y)^2 = (y- \bar y)^T(y- \bar y)$ - *Total Sum of Squares*, where $\bar y$ is the mean of the response. Recall that $RSS = (y-x\beta)^T(y-x\beta)$.  
+TSS measures the total variance in the response Y , and can be
+ thought of as the amount of variability inherent in the response before the
+regression is performed. In contrast, RSS measures the amount of variability
+that is left unexplained after performing the regression.^[Gareth James et al An Introduction to Statistical Learning] 
+
+
+# Implementation
+
+You can switch between Python and R by clicking on the tab.
+
+
+## Simulating the data{.tabset .tabset-fade}
+
+We will simulate a fairly large dataset - $100000 \times 10$. Below is a function to simulate linear regression data for any number of samples and predictors.
+
+### Python
+```{python}
+#Simulation in Python
+
+import numpy as np
+
+np.random.seed(1)
+
+def simulateLinearRegressionData(m, n):
+    """
+  Parameters
+  ----------
+  m - number of samples
+  n - number of features
+  
+  
+  Return
+  ---------
+    matrix X (m*n-1)
+    vector y(m)
+    vector beta(n)
+    
+  note: for convenience 1 has been added to the last column of X
+    """
+    X = np.zeros((m,n-1))
+    beta = np.zeros(n)
+    for i in range(n-1):
+      mu = np.random.randint(0, 50)
+      sigma = np.random.normal(3, 0.1)
+      X[:,i] = np.random.normal(mu, sigma, size=m)
+      beta[i] =  np.random.normal(mu, sigma)
+      
+    X = np.hstack((X, np.ones((m,1))))
+    beta[-1] = np.random.normal()
+    beta =  np.reshape(beta, (n, -1))
+    y = np.dot(X, beta)
+    
+    return X, y, beta
+    
+```
+
+
+```{python}
+X, y, true_beta = simulateLinearRegressionData(100000, 10)
+print(true_beta)
+```
+
+### R
+
+```{r}
+#Simulation in R
+
+set.seed(1)
+
+simulate_linear_regression_data <- function(m, n){
+  #-------Input--------
+  # m- number of samples
+  # n - number of predictors/features
+  #------Return--------
+  # X - matrix m*n 
+  # y - vector size - m
+  # beta - vector size - n
+  
+  # Note: a column of "ones" was added to last column of X for convenience
+  X <- matrix(nrow = m, ncol =n-1)
+  beta <- matrix(nrow = n)
+  
+  for (i in 1:(n-1)) {
+    mu <- runif(1, 0, 50)
+    std <- rnorm(1,3,0.1)
+    X[, i] <- rnorm(m, mu, std)
+    beta[i,] <- rnorm(1, mu, std)
+  }
+  X <- cbind(X, rep(1, m))
+  beta[length(beta)] <- rnorm(1)
+  
+  y <- X %*% beta
+  
+  return( list(X, y, beta))
+}
+
+
+simulation <- simulate_linear_regression_data(100000, 10)
+X <- simulation[[1]]
+y <- simulation[[2]]
+true_beta <- simulation[[3]]
+
+true_beta
+
+```
+
+
+
+## Closed-form {.tabset .tabset-fade}
+
+Recall that: $\hat{\beta} = (X^TX)^{-1}X^Ty$
+
+
+### Python
+```{python}
+#closed-form in python
+
+from numpy.linalg import inv # for inverse of matrix
+
+def estimateBetaLR(X, y):
+  """
+  function for closed-form estimation of beta
+  """
+  return np.dot(inv(np.dot(X.T, X)), 
+                  np.dot(X.T, y)
+                  )
+
+```
+
+```{python}
+estimated_beta = estimateBetaLR(X, y)
+print("estimated beta,   true beta\n", np.hstack((estimated_beta, true_beta)))
+```
+We see the estimated coefficients are approximately equal to the "true beta" used for simulation. 
+Note: On real data, we never know what the true $\beta$ is.
+
+### R
+
+```{r}
+#closed-form in R
+
+estimate_beta_LR <- function(X, y){
+  
+  # function for closed-form estimation of beta
+  # solve(a, b)  for matrix multiplication of inverse(a) *  b
+  return(solve( t(X) %*% X,
+                t(X) %*% y)
+        )
+}
+
+estimated_beta <- estimate_beta_LR(X, y)
+data.frame(estimated_beta, true_beta)
+
+```
+
+
+We see the estimated coefficients are approximately equal to the "true beta" used for simulation. 
+Note: On real data, we never know what the true $\beta$ is.
+
+
+## Gradient Descent {.tabset .tabset-fade}
+
+The the "oracle" function is just a fancy way of describing the gradient $\nabla RSS$ because it determines the descent direction.
+
+### Python
+
+```{python}
+#Gradient Descent in python
+
+np.random.seed(2)
+
+def calc_rss(_beta, x, y):
+  """
+  function to calculate RSS 
+  """
+  return float((y-x.dot(_beta)).T.dot(y-x.dot(_beta)))
+  
+  
+def oracle(_beta, x, y):
+  """
+  Oracle computes and returns the gradient of RSS 
+  """
+  return -2 * np.dot(x.T, (y-np.dot(x,_beta)))
+  
+  
+def gd(x, y, maxit, step_size):
+  """
+  Input
+  -------
+  x - matrix m * n
+  y - vector of target values
+  maxit - number of iterations
+  step_size - step-size t
+  
+  Return
+  -------
+  beta - the gradient descent estimate of beta
+  rss_history - the rss computed at each iteration of gd
+  """
+  beta = np.random.normal(size=(x.shape[1], 1)) #initial guess
+  rss_history = []
+  for i in range(maxit):
+    rss_history.append(calc_rss(beta, x, y))
+    step_direction = -oracle(beta, x, y)
+    beta = beta + step_size*step_direction
+    
+  return beta, rss_history
+  
+
+gd_beta, rss_history = gd(X, y,50, 1e-10)
+    
+```
+
+
+```{python}
+print("gd-estimated beta,   true beta\n", 
+      np.hstack((gd_beta, true_beta))
+      )
+```
+
+```{r, echo=FALSE}
+# library(reticulate)
+# py_install("matplotlib")
+# py_install("--user loess") 
+```
+
+
+```{python}
+import matplotlib.pyplot as plt
+plt.style.use("seaborn")
+plt.plot(rss_history)
+```
+
+The gradient descent method provides a close approximation of the "true beta", but finding the right step-size is a very tedious task (this took me a while). The method appears to converge after the 20th iteration.
+
+### R
+```{r}
+#Gradient Descent in R
+
+set.seed(2)
+library(ggplot2) # data visualization package
+
+calc_rss <- function(beta, x, y){
+  # function to calculate RSS
+  return( t(y- (x%*%beta)) %*% 
+            (y - (x %*%beta)) 
+          )
+}
+
+oracle <- function(beta, x, y){
+  # Oracle computes and returns the gradient of RSS 
+  return( (-2 *  t(x)) %*% (y - (x %*% beta) )
+    
+  )
+}
+  
+gd <- function(x, y, maxit, step_size){
+  # -----Input-----
+  # x - matrix m * n
+  # y - vector of target values
+  # maxit - number of iterations
+  # step_size - step-size t
+  # 
+  # -----Return-----
+  # beta - the gradient descent estimate of beta
+  # rss_history - the rss computed at each iteration of gd
+  
+  beta = rnorm(dim(X)[2]) #initial guess
+  rss_history <- rep(0, maxit)
+  for (i in 1:maxit) {
+    rss_history[i] <- calc_rss(beta, x, y)
+    beta = beta - (step_size * oracle(beta, x, y))
+
+  }
+  iteration <- 1:maxit
+  plot_df <- data.frame(iteration, rss_history)
+  
+  return( list(beta, plot_df))
+}
+
+gd_summary <- gd(X, y, 50, 1e-10) 
+gd_beta <- gd_summary[[1]]
+rss_plot <- gd_summary[[2]]
+
+ggplot(rss_plot,  aes(x = iteration, y = rss_history)) +
+  geom_line()
+```
+
+```{r}
+data.frame(gd_beta, true_beta)
+```
+The gradient descent method provides a close approximation of the "true beta", but finding the right step-size is a very tedious task (this took me a while). The method appears to converge after the 15th iteration.
+
+
+## Assessment {.tabset .tabset-fade}
+
+Now that we have fit a linear regression to our data, we need a way to assess how well the model fits the data. 
+
+### Python
+
+```{python}
+def calc_tss(y):
+  return np.dot((y-np.mean(y)).T, 
+                ((y-np.mean(y)))
+                )
+  
+def rse_r2(beta,x, y):
+  rss = calc_rss(beta,x, y )
+  rse = np.sqrt(rss/(len(y)-x.shape[1]-1))
+  tss = calc_tss(y)
+  r2 = 1-(rss/tss)
+  return rse, r2
+  
+```
+
+
+```{python}
+
+rse, r2 = rse_r2(gd_beta, X, y)
+print(f"RSE = {rse}")
+print(f"R2 = {float(r2)}")
+```
+
+We used the estimates of $\beta$ obtained using gradient descent to compute the statistics. An $R^2$ of ~ $0.985$ suggests $98.5\%$ of the variability in the response (y) is explained by the regression. This means the linear regression model fits our data very well.
+
+### R
+
+```{r}
+
+calc_tss <- function(y){
+  return ( t(y - mean(y)) %*%
+             (y - mean(y))
+          )
+}
+
+rse_r2 <- function(beta, x,y){
+  rss <- calc_rss(beta, x, y)
+  rse <- sqrt(rss/length(y)-dim(x)[2] - 1)
+  tss <- calc_tss(y)
+  r2 <- 1 - (rss/tss)
+  
+  return( list(rse, r2))
+}
+
+rse_r2_val <- rse_r2(gd_beta, X, y)
+print(paste("RSE = ", rse_r2_val[1]))
+print(paste("R2 = ", rse_r2_val[2]))
+```
+We used the estimates of $\beta$ obtained using gradient descent to compute the statistics. An $R^2$ of ~ $0.98$ suggests $98\%$ of the variability in the response (y) is explained by the regression. This means the linear regression model fits our data very well.
+
+
+## Diagnostics {.tabset .tabset-fade}
+
+We will see diagnostics in detail later, but an example is using graphical tools like residual plots to help identify non-linearity in the relationship between the response and predictors. The residual plot for a simple linear regression is $y-\hat y$ vs $x$, while for multiple linear regression it is $y-\hat y$ vs $\hat y$.
+
+### Python
+
+```{python}
+
+def plot_residuals(x, y, beta):
+  y_hat = x.dot(beta)
+  e = y - y_hat
+  if x.shape[1] > 1:
+    plt.scatter(y_hat, e)
+    plt.show()
+  else:
+    plt.scatter(x[:,0], e)
+    
+```
+
+```{python}
+plt.figure(figsize=(20,12))
+plot_residuals(X, y, gd_beta)
+```
+
+There doesn't appear to be any pattern in the residuals which means the relationship in our data is linear. In the case of non-linear relationship we can use the non-linear transformations of the predictor variables or consider alternative non-linear methods.
+
+### R
+
+```{r}
+plot_residuals <- function(x, y, beta){
+  y_hat <- x%*%beta
+  e <- y - y_hat
+  if (dim(X)[2] >1){
+    e_df <- data.frame(y_hat, e)
+    ggplot(e_df, aes(x=y_hat, y=e)) +
+      geom_point() +
+      geom_smooth()
+  }
+  else{
+    e_df <- data.frame(x, e)
+    ggplot(e_df, aes(x=x, y=e)) +
+      geom_point() +
+      geom_smooth()
+  }
+}
+
+plot_residuals(X, y, gd_beta)
+```
+  
+    
+The blue line is a smooth fit to the residuals. There doesn't appear to be any pattern in the residuals which means the relationship in our data is linear. In the case of non-linear relationship we can use non-linear transformations of the predictor variables or consider alternative non-linear methods.
+
+
+# Using Libraries
+
+## scikit-learn for Python
+
+Scikit-learn is a free and open-source machine learning library for Python. 
+
+Recall that for convenience we added "ones" to the X matrix. We remove the column of ones below before using the LinearRegression() function from scikit-learn.
+
+
+```{python}
+from sklearn.linear_model import LinearRegression
+
+lm = LinearRegression().fit(X[:,:-1], y)
+lm.coef_
+lm.intercept_
+```
+The results obtained using the library and our own implementation are approximately equal.
+
+In scikit-learn, the estimates $\beta_1, \beta_2,..., \beta_p$ are stored in "coef_" while $\beta_0$ is stored in "intercept_". 
+
+
+Below we compute the $R^2$ using scikit-learn. Using gradient descent estimates of $\beta$, we got $R^2 = 0.98$ in our implementation of $R^2$. If we used the closed-form estimate of $\beta$ in our implementation of $R^2$ we would get $R^2=1$, you can verify this on your own.
+
+```{python}
+lm.score(X[:,:-1], y)
+```
+
+## lm() in R
+
+lm() is a function in R for fitting linear regression models.
+
+```{r}
+X_ <- X[,1:dim(X)[2]-1]
+lm <- lm(y~X_)
+lm
+```
+
+$\beta_0$ is stored in "intercept" and the other coefficients $\beta_1, \beta_2,..., \beta_p$ in $x_1,x_2,...,x_9$
+
+To get the $R^2$ and other statistics, we use summary().
+
+Note: The statistics obtained with lm()/summary() appear to differ from what we got in our own implementation. This is due to the fact that we used gradient descent estimates of $\beta$. I did this on purpose to compare the two approaches of estimating $\beta$. If we used the closed-form estimate in our implementation we will get identical results for the statistics, you can verify this on your own.
+
+
+```{r}
+summary(lm)
+```
+
+```{python, echo=F}
+import pandas as pd
+
+X, y, true_beta = simulateLinearRegressionData(100000, 10)
+df_k = np.hstack((X[:,:-1], y))
+colnames = ["x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "y"]
+df_k = pd.DataFrame(df_k, columns=colnames)
+```
+
+```{python, echo=F}
+df_k.to_csv("sim_data", index=False)
+
+# in r rmd2jupyter("LR.Rmd")   --- library(rmd2jupyter)
+```
+
+
+
+
